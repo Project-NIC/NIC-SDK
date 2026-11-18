@@ -15,7 +15,7 @@ it.
 
 | | what | state |
 |---|---|---|
-| [`MUF.md`](MUF.md) | **MUF**, the record format — blocks of a sector, each with its CRC; streams at their own rates; every stream and value described in the file's head; a project's profile on its core | the core settled; first used by [NIC-Tiros](https://github.com/Project-NIC/NIC-Tiros) |
+| [`MUF.md`](MUF.md) | **MUF**, the record format — blocks of a sector, each with its CRC; streams at their own rates; every stream and value described in the file's head; a profile on its core for each device | the core settled |
 
 ## To come
 

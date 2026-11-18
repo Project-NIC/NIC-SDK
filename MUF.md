@@ -1,8 +1,7 @@
 # MUF — the Matroshka Universal File, its core
 
-**One record format for Project-NIC's projects**, grown from NIC-Strelka's record (version 4). The
-core is the same for every project; a project's **profile** says which streams and groups it uses
-(Tiros's: [`RECORD.md`](https://github.com/Project-NIC/NIC-Tiros/blob/main/RECORD.md)). NIC-Strelka is to move onto it; **no compatibility with the old `STRK` files** — they are made again by the core. **MUF has no versions** (§12).
+**One universal record format.** The core is the same for every use; a **profile** says which
+streams and groups a device writes. **MUF has no versions** (§12).
 
 ## 1 The file
 
@@ -13,10 +12,9 @@ the head blocks and the set's table again.
 
 ## 2 The mark
 
-Bytes 0–3 of every head block: **`MUF` and the project's letter** (a bare `.muf` is a niche
+Bytes 0–3 of every head block: **`MUF` and the profile's letter** (a bare `.muf` is a niche
 format's — Alpha Five's temporary license file, ProtoMuck's MUF; the four-letter ones clear of it as
-far as known) — `MUFS` NIC-Strelka, `MUFT`
-NIC-Tiros, another letter as a project needs. The file's extension the same four.
+far as known). The file's extension the same four.
 
 ## 3 The kinds of block
 
@@ -50,7 +48,7 @@ Then the steps, from byte 28 to at most 507.
 
 | bytes | the field | what for |
 |---|---|---|
-| 0–3 | the mark | `MUF` + the project's letter |
+| 0–3 | the mark | `MUF` + the profile's letter |
 | 4 | the format u8 | 1, for ever — no versions (§12) |
 | 5 | the kind u8 | 0x01 |
 | 6–7 | the session u16 | |
@@ -78,11 +76,9 @@ the steps a block u8; a step's bytes u8; flags u8 (bit 0: every step carries its
 **The head continued (kind 0x02):** bytes 0–3 the mark, 4 the format (1), 5 the kind, 6–7 the session,
 8–11 free, **12–479 thirteen groups**, 480–507 free.
 
-## 6 A group (36 B) — as NIC-Heimdall's layout field
+## 6 A group (36 B)
 
-A group describes a run of values in a step, **as NIC-Heimdall's `LAYOUT` field describes a
-sensor's value** (its `core/archive/HMC.md`): the same scale and offset, so that one reader serves
-both.
+A group describes a run of values in a step: its type, its scale and offset, its name and unit.
 
 | bytes | the field | |
 |---|---|---|
@@ -96,11 +92,11 @@ both.
 | 8–11 | add i32 | |
 | 12–19 | the name, 8 B, ASCII | NUL-padded |
 | 20–27 | the unit, 8 B, ASCII | NUL-padded; none for a byte of fields |
-| 28 | ref u8 | a reference group, its number + 1, 0 none — a group measuring the same, against which a codec may store the difference (Heimdall's `ref`) |
+| 28 | ref u8 | a reference group, its number + 1, 0 none — a group measuring the same, against which a codec may store the difference |
 | 29–30 | the range u16 | what the sheet promises, in the unit |
 | 31–35 | free | zeros |
 
-**physical = (raw + add) × mantissa × 10^exp10** — NIC-Heimdall's formula. A calibration beyond it
+**physical = (raw + add) × mantissa × 10^exp10**. A calibration beyond it
 — an accelerometer's six faces, a magnetometer's matrix, a sensor's response — rides in the
 **constants** stream (kind 0x06), described there by groups of its own.
 
@@ -108,7 +104,7 @@ both.
 size, no gap. **A value missing:** for a signed type its least (−128, −32 768, …), for an unsigned
 one its greatest (255, 65 535, …), for a float NaN. An exporter reads a step with `struct`'s
 letters as they stand: `'<' + letters` (`'>'` for a group flagged big-endian). **A stream with no
-groups** is bytes for its project's own decoder — Heimdall's record fronts and ModBus blocks.
+groups** is bytes for the profile's own decoder — a device's raw frames, a bus's blocks.
 
 ## 7 Time
 
@@ -122,7 +118,7 @@ a GNSS's pulse, a radio's sync, an outside clock — is the head's byte 23.
 
 ## 8 The set's table (kind 0x04) and the end (kind 0x03)
 
-**The set's table:** as NIC-Strelka's — the common 12 B, then the table's whole length u16 at
+**The set's table:** the common 12 B, then the table's whole length u16 at
 12–13, the text in 14–507, UTF-8, CSV with semicolons (RFC 4180's quoting), as many blocks as it
 needs; its fields the profile's.
 
@@ -148,24 +144,18 @@ is written at least every few seconds (the profile says how often), so that a cu
 little. **The constants (kind 0x06)** are one step, no time, written once after the head and the
 table. A file without its end is read to its last block whose CRC holds.
 
-## 10 NIC-Heimdall's archive (HMC) beside this core
+## 10 Left out, and why
 
-Read in NIC-Heimdall's own description of HMC — a different format, kept by NIC-Heimdall; what HMC has that MUF
-does without, and why:
-
-- **Compression (HCC, a set of codecs):** a trial only, not wanted — dropped.
-- **A layout changed mid-file (configs from a second):** the record stops and a new file begins
-  with the new head — nothing more needed.
-- **COBS framing, so a reader resyncs anywhere:** not needed in MUF — every block is one sector at
-  a fixed place, beginning with its kind, session and number and ending in its CRC; a reader finds
+- **Compression:** not wanted — a card holds enough, and a damaged block stays readable alone.
+- **A layout changed mid-file:** the record stops and a new file begins with the new head —
+  nothing more needed.
+- **COBS framing, so a reader resyncs anywhere:** not needed — every block is one sector at a
+  fixed place, beginning with its kind, session and number and ending in its CRC; a reader finds
   the next block at the next 512 B boundary and knows it whole or damaged.
 - **A description from the file's end, for a search by time:** not needed — the blocks are of one
   size and carry their first step's number, so a step is a binary search over the blocks
   themselves.
 - **A file a series per address:** in MUF a file per unit and session, its streams inside.
-
-HMC stays Heimdall's own format; whether Heimdall writes MUF beside it is for Heimdall's own
-session.
 
 ## 11 The index (kind 0x07)
 
@@ -220,8 +210,7 @@ named here with what was taken:
 
 | from | what MUF took | how open |
 |---|---|---|
-| NIC-Strelka's record, version 4 | the 512 B blocks with a CRC each, the head describing groups, the set's table, the end, the file's room taken at the start | Project-NIC's own, MIT / CERN-OHL-P |
-| NIC-Heimdall's HMC (the Matryoshka container) | a value's description: (raw + add) × mantissa × 10^exp10, the 8 B name and unit, the reference channel | Project-NIC's own, MIT / CERN-OHL-P |
+| Project-NIC's earlier record formats | the 512 B blocks with a CRC each, the head describing groups, the set's table, the end, the file's room taken at the start; a value's description — (raw + add) × mantissa × 10^exp10, the 8 B name and unit, the reference channel | Project-NIC's own, MIT |
 | EDF, the European Data Format | each signal described in the file's own head — label, dimension, range | an open specification, free to use |
 | PX4's ULog | a head describing every kind of record, streams at their own rates, timestamps | an open specification of a BSD-licensed project |
 | ArduPilot's DataFlash, Python's `struct` | one ASCII letter a value's type | open documentation; a common convention |
