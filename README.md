@@ -9,7 +9,7 @@ uses, so that it is written once and never copied: each project takes a tagged v
 it.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-red.svg)](https://opensource.org/licenses/MIT)
-![Version: 0.3](https://img.shields.io/badge/version-0.3-blue.svg)
+![Version: 0.4](https://img.shields.io/badge/version-0.4-blue.svg)
 
 ## What is in it
 
@@ -21,12 +21,16 @@ it.
 | [`tools/muf2csv.c`](tools/muf2csv.c) | MUF to CSV in C, a file a stream |
 | [`tools/mufwrite.py`](tools/mufwrite.py), [`tools/muf.py`](tools/muf.py) | **the writer and the reader in Python** — the C's twins, tried on a computer with nothing compiled; the reader checks the index and writes CSV |
 | [`tools/muf2gpx.c`](tools/muf2gpx.c), [`tools/muf2gpx.py`](tools/muf2gpx.py) | **MUF to GPX**, twins in C and Python, the same bytes: the position found by its description — two values in degrees, a height in metres — each point's time from the head's start and the stream's rate, a missing fix left out |
-| [`tests/`](tests/) | the twins held to each other: a recorder's file of 60 s at 1 kHz written by the C and by the Python **the same byte for byte**, read by both readers to **the same CSV byte for byte**, and its content checked; a track exported to GPX by both twins, the same byte for byte |
+| [`MLF.md`](MLF.md) | **MLF**, the Matroshka Log File — the dynamic container beside MUF: records of any length as they come, a codec chosen per segment, the description growing down from the file's end and allowed to change mid-file; a profile on its core for each use |
+| [`NRC.md`](NRC.md) | **NRC**, the NIC Rice Codec — lossless integer series into one bit stream: predict, Rice-code the residue, no table; carried by an MLF segment or packing another container's data |
+| [`mlf/mlf.c`](mlf/mlf.c), [`mlf/mlf.h`](mlf/mlf.h), [`nrc/nrc.c`](nrc/nrc.c), [`nrc/nrc.h`](nrc/nrc.h) | **MLF's and NRC's cores in C99**, malloc and free their only dependencies |
+| [`tools/mlf.py`](tools/mlf.py), [`tools/nrc.py`](tools/nrc.py) | **the same cores in Python**, the C's twins |
+| [`tests/`](tests/) | the twins held to each other: a recorder's file of 60 s at 1 kHz written by the C and by the Python **the same byte for byte**, read by both readers to **the same CSV byte for byte**, and its content checked; a track exported to GPX by both twins, the same byte for byte; an MLF sample file written by the C and by the Python the same byte for byte, every series read back, random series round-tripped through NRC |
 
 **Two twins at one level:** C for the units, the computer and the browser (WebAssembly); Python
 the same, for trying things without compiling — each held to the other.
 
-Run the tests: `python3 tests/test_muf.py` and `python3 tests/test_gpx.py` (a C compiler and Python 3).
+Run the tests: `python3 tests/test_muf.py`, `python3 tests/test_gpx.py` and `python3 tests/test_mlf.py` (a C compiler and Python 3).
 
 ## To come
 
