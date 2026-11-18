@@ -9,18 +9,28 @@ uses, so that it is written once and never copied: each project takes a tagged v
 it.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-red.svg)](https://opensource.org/licenses/MIT)
-![Version: 0.1](https://img.shields.io/badge/version-0.1-blue.svg)
+![Version: 0.2](https://img.shields.io/badge/version-0.2-blue.svg)
 
 ## What is in it
 
-| | what | state |
-|---|---|---|
-| [`MUF.md`](MUF.md) | **MUF**, the record format — blocks of a sector, each with its CRC; streams at their own rates; every stream and value described in the file's head; a profile on its core for each device | the core settled |
+| | what |
+|---|---|
+| [`MUF.md`](MUF.md) | **MUF**, the record format — blocks of a sector, each with its CRC; streams at their own rates; every stream and value described in the file's head; a profile on its core for each device |
+| [`muf/muf.c`](muf/muf.c), [`muf/muf.h`](muf/muf.h) | **MUF's writer in C**, for any unit: the head and its continuations, the set's table, the constants, every stream's blocks as they fill, pauses as jumps in the steps, an index after every 200 numbered blocks, the end |
+| [`muf/muf_read.c`](muf/muf_read.c), [`muf/muf_read.h`](muf/muf_read.h) | **MUF's reader in C**: through a callback — a file, a buffer, a browser — every block's CRC, the head and its groups, the values raw and physical, every type letter |
+| [`tools/muf2csv.c`](tools/muf2csv.c) | MUF to CSV in C, a file a stream |
+| [`tools/mufwrite.py`](tools/mufwrite.py), [`tools/muf.py`](tools/muf.py) | **the writer and the reader in Python** — the C's twins, tried on a computer with nothing compiled; the reader checks the index and writes CSV |
+| [`tests/`](tests/) | the twins held to each other: a recorder's file of 60 s at 1 kHz written by the C and by the Python **the same byte for byte**, read by both readers to **the same CSV byte for byte**, and its content checked |
+
+**Two twins at one level:** C for the units, the computer and the browser (WebAssembly); Python
+the same, for trying things without compiling — each held to the other.
+
+Run the tests: `python3 tests/test_muf.py` (a C compiler and Python 3).
 
 ## To come
 
-MUF's writer for the units, its reader, its exporters (CSV, GPX, ULog, miniSEED, IAGA-2002) and a
-viewer — each when a project needs it.
+MUF's exporters — GPX, ULog, miniSEED, IAGA-2002, EDF, C3D — and a viewer, each when a project
+needs it.
 
 Software under the MIT licence ([`LICENSE`](LICENSE)).
 
