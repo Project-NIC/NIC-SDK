@@ -1,9 +1,8 @@
-# MUF — the Matroshka Universal File, its core (closed 17 Nov 2026)
+# MUF — the Matroshka Universal File, its core
 
 **One record format for Project-NIC's projects**, grown from NIC-Strelka's record (version 4). The
 core is the same for every project; a project's **profile** says which streams and groups it uses
-(Tiros's: [`RECORD.md`](https://github.com/Project-NIC/NIC-Tiros/blob/main/RECORD.md)). NIC-Strelka is to move onto it; **no compatibility with the old `STRK` files** — they are made again by the core. Kept here
-until the format has a home of its own. **MUF has no versions** (§12).
+(Tiros's: [`RECORD.md`](https://github.com/Project-NIC/NIC-Tiros/blob/main/RECORD.md)). NIC-Strelka is to move onto it; **no compatibility with the old `STRK` files** — they are made again by the core. **MUF has no versions** (§12).
 
 ## 1 The file
 
@@ -17,7 +16,7 @@ the head blocks and the set's table again.
 Bytes 0–3 of every head block: **`MUF` and the project's letter** (a bare `.muf` is a niche
 format's — Alpha Five's temporary license file, ProtoMuck's MUF; the four-letter ones clear of it as
 far as known) — `MUFS` NIC-Strelka, `MUFT`
-NIC-Tiros, `MUFH` NIC-Heimdall, another letter as needed. The file's extension the same four.
+NIC-Tiros, another letter as a project needs. The file's extension the same four.
 
 ## 3 The kinds of block
 
@@ -151,7 +150,7 @@ table. A file without its end is read to its last block whose CRC holds.
 
 ## 10 NIC-Heimdall's archive (HMC) beside this core
 
-Read in its `core/archive/HMC.md` (17 Nov 2026) — a different format, kept; what HMC has that MUF
+Read in NIC-Heimdall's own description of HMC — a different format, kept by NIC-Heimdall; what HMC has that MUF
 does without, and why:
 
 - **Compression (HCC, a set of codecs):** a trial only, not wanted — dropped.
@@ -221,8 +220,8 @@ named here with what was taken:
 
 | from | what MUF took | how open |
 |---|---|---|
-| NIC-Strelka's record, version 4 | the 512 B blocks with a CRC each, the head describing groups, the set's table, the end, the file's room taken at the start | the desk's own, MIT / CERN-OHL-P |
-| NIC-Heimdall's HMC (the Matryoshka container) | a value's description: (raw + add) × mantissa × 10^exp10, the 8 B name and unit, the reference channel | the desk's own, MIT / CERN-OHL-P |
+| NIC-Strelka's record, version 4 | the 512 B blocks with a CRC each, the head describing groups, the set's table, the end, the file's room taken at the start | Project-NIC's own, MIT / CERN-OHL-P |
+| NIC-Heimdall's HMC (the Matryoshka container) | a value's description: (raw + add) × mantissa × 10^exp10, the 8 B name and unit, the reference channel | Project-NIC's own, MIT / CERN-OHL-P |
 | EDF, the European Data Format | each signal described in the file's own head — label, dimension, range | an open specification, free to use |
 | PX4's ULog | a head describing every kind of record, streams at their own rates, timestamps | an open specification of a BSD-licensed project |
 | ArduPilot's DataFlash, Python's `struct` | one ASCII letter a value's type | open documentation; a common convention |
