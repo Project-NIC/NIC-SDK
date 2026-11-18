@@ -9,7 +9,7 @@ uses, so that it is written once and never copied: each project takes a tagged v
 it.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-red.svg)](https://opensource.org/licenses/MIT)
-![Version: 0.2](https://img.shields.io/badge/version-0.2-blue.svg)
+![Version: 0.3](https://img.shields.io/badge/version-0.3-blue.svg)
 
 ## What is in it
 
@@ -20,16 +20,17 @@ it.
 | [`muf/muf_read.c`](muf/muf_read.c), [`muf/muf_read.h`](muf/muf_read.h) | **MUF's reader in C**: through a callback — a file, a buffer, a browser — every block's CRC, the head and its groups, the values raw and physical, every type letter |
 | [`tools/muf2csv.c`](tools/muf2csv.c) | MUF to CSV in C, a file a stream |
 | [`tools/mufwrite.py`](tools/mufwrite.py), [`tools/muf.py`](tools/muf.py) | **the writer and the reader in Python** — the C's twins, tried on a computer with nothing compiled; the reader checks the index and writes CSV |
-| [`tests/`](tests/) | the twins held to each other: a recorder's file of 60 s at 1 kHz written by the C and by the Python **the same byte for byte**, read by both readers to **the same CSV byte for byte**, and its content checked |
+| [`tools/muf2gpx.c`](tools/muf2gpx.c), [`tools/muf2gpx.py`](tools/muf2gpx.py) | **MUF to GPX**, twins in C and Python, the same bytes: the position found by its description — two values in degrees, a height in metres — each point's time from the head's start and the stream's rate, a missing fix left out |
+| [`tests/`](tests/) | the twins held to each other: a recorder's file of 60 s at 1 kHz written by the C and by the Python **the same byte for byte**, read by both readers to **the same CSV byte for byte**, and its content checked; a track exported to GPX by both twins, the same byte for byte |
 
 **Two twins at one level:** C for the units, the computer and the browser (WebAssembly); Python
 the same, for trying things without compiling — each held to the other.
 
-Run the tests: `python3 tests/test_muf.py` (a C compiler and Python 3).
+Run the tests: `python3 tests/test_muf.py` and `python3 tests/test_gpx.py` (a C compiler and Python 3).
 
 ## To come
 
-MUF's exporters — GPX, ULog, miniSEED, IAGA-2002, EDF, C3D — and a viewer, each when a project
+More exporters — ULog, miniSEED, IAGA-2002, EDF, C3D — and a viewer, each when a project
 needs it.
 
 Software under the MIT licence ([`LICENSE`](LICENSE)).
