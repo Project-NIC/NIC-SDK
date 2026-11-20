@@ -27,9 +27,17 @@ def read(path):
             good.append(None)          # damaged: skipped, the rest read
         else:
             good.append(b)
-    h = good[0]
+    h, heads = good[0], good
     if h is None or h[:3] != b"MUF" or h[5] != 0x01:
-        raise MufError("no head")
+        h = None
+        for k in range(1, min(256, len(good)) + 1):     # the head's mirror in the room's last blocks
+            m = good[len(good) - k]
+            if m is not None and m[:3] == b"MUF" and m[5] == 0x01 and m[22] == k and \
+                    all(x is not None for x in good[len(good) - k:]):
+                h, heads = m, good[len(good) - k:]
+                break
+        if h is None:
+            raise MufError("no head")
     f = {"mark": h[:4].decode(), "format": h[4], "session": struct.unpack_from("<H", h, 6)[0],
          "unit": h[8], "chip": struct.unpack_from("<Q", h, 9)[0], "fw": tuple(h[17:20]),
          "time_source": h[23], "start_us": struct.unpack_from("<Q", h, 24)[0],
@@ -42,7 +50,7 @@ def read(path):
                         "flags": fl, "groups": []})
     raw_groups = [h[208 + 36 * g:244 + 36 * g] for g in range(min(8, n_groups))]
     for c in range(1, n_heads):
-        hb = good[c]
+        hb = heads[c]
         if hb is None or hb[5] != 0x02:
             raise MufError("a head's continuation missing")
         for k in range(13):
@@ -67,7 +75,10 @@ def read(path):
 
     steps = {s["kind"]: [] for s in streams}
     table, end, indexes, numbered = b"", None, [], []
-    for b in good[n_heads:]:
+    for i in range(n_heads, len(good)):
+        b = good[i]
+        if blocks[i] == bytes(BLOCK) or (b is not None and b[:3] == b"MUF"):
+            continue                    # the room unwritten, or the head's mirror
         if b is None:
             numbered.append(None)
             continue

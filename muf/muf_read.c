@@ -51,16 +51,14 @@ static void get_group(struct muf_group *g, const uint8_t *p)
 	g->range = g16(p + 29);
 }
 
-int muf_open(struct muf_reader *r, muf_read_fn read, void *ctx)
+static int is_head(const uint8_t *b)
 {
-	uint8_t b[MUF_BLOCK];
+	return good(b) && memcmp(b, "MUF", 3) == 0 && b[5] == MUF_HEAD && b[4] == 1;
+}
 
-	memset(r, 0, sizeof(*r));
-	r->read = read;
-	r->ctx = ctx;
-	if (read(ctx, b) != 0 || !good(b) || memcmp(b, "MUF", 3) != 0 || b[5] != MUF_HEAD || b[4] != 1) {
-		return -1;
-	}
+/* the head's first block parsed; its continuations through more(i), i from 1 */
+static int head(struct muf_reader *r, const uint8_t *b, int (*more)(void *x, unsigned i, uint8_t m[MUF_BLOCK]), void *x)
+{
 	r->head.letter = (char)b[3];
 	r->head.session = g16(b + 6);
 	r->head.unit = b[8];
@@ -86,7 +84,7 @@ int muf_open(struct muf_reader *r, muf_read_fn read, void *ctx)
 	}
 	for (unsigned c = 1; c < b[22]; c++) {
 		uint8_t m[MUF_BLOCK];
-		if (read(ctx, m) != 0 || !good(m) || m[5] != MUF_HEAD_MORE) {
+		if (more(x, c, m) != 0 || !good(m) || m[5] != MUF_HEAD_MORE) {
 			return -3;
 		}
 		for (unsigned k = 0; k < 13 && have < r->n_groups; k++) {
@@ -96,12 +94,92 @@ int muf_open(struct muf_reader *r, muf_read_fn read, void *ctx)
 	return 0;
 }
 
+static int more_read(void *x, unsigned i, uint8_t m[MUF_BLOCK])
+{
+	struct muf_reader *r = x;
+
+	(void)i;
+	return r->read(r->ctx, m);
+}
+
+int muf_open(struct muf_reader *r, muf_read_fn read, void *ctx)
+{
+	uint8_t b[MUF_BLOCK];
+
+	memset(r, 0, sizeof(*r));
+	r->read = read;
+	r->ctx = ctx;
+	if (read(ctx, b) != 0 || !is_head(b)) {
+		return -1;
+	}
+	return head(r, b, more_read, r);
+}
+
+struct mem {
+	const uint8_t *head;
+	unsigned n;
+};
+
+static int more_mem(void *x, unsigned i, uint8_t m[MUF_BLOCK])
+{
+	const struct mem *h = x;
+
+	if (i >= h->n) {
+		return -1;
+	}
+	memcpy(m, h->head + (size_t)MUF_BLOCK * i, MUF_BLOCK);
+	return 0;
+}
+
+int muf_open_blocks(struct muf_reader *r, const uint8_t *head_blocks, unsigned n, muf_read_fn read, void *ctx)
+{
+	struct mem h = { head_blocks, n };
+
+	memset(r, 0, sizeof(*r));
+	r->read = read;
+	r->ctx = ctx;
+	if (!n || !is_head(head_blocks)) {
+		return -1;
+	}
+	return head(r, head_blocks, more_mem, &h);
+}
+
+unsigned muf_mirror(const uint8_t *tail, unsigned n)
+{
+	for (unsigned k = 1; k <= n; k++) {
+		const uint8_t *b = tail + (size_t)MUF_BLOCK * (n - k);
+		if (is_head(b) && b[22] == k) {
+			unsigned i = 1;
+			while (i < k && good(b + (size_t)MUF_BLOCK * i)) {
+				i++;
+			}
+			if (i == k) {
+				return k;
+			}
+		}
+	}
+	return 0;
+}
+
+static int zeros(const uint8_t *b)
+{
+	for (unsigned i = 0; i < MUF_BLOCK; i++) {
+		if (b[i]) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
 int muf_next(struct muf_reader *r, struct muf_block *b)
 {
 	for (;;) {
 		int e = r->read(r->ctx, b->raw);
 		if (e) {
 			return e;
+		}
+		if (zeros(b->raw) || (good(b->raw) && memcmp(b->raw, "MUF", 3) == 0)) {
+			continue;        /* the room unwritten, or the head's mirror */
 		}
 		if (!good(b->raw)) {
 			r->blocks_bad++; /* damaged: skipped, the rest read */

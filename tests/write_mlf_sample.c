@@ -61,7 +61,7 @@ int main(int argc, char **argv)
         return 2;
     static const uint8_t sections[] = {1, 0, 0, 0, 7, 0, 0, 0, 'p', 'r', 'o', 'f', 'i', 'l', 'e'};
     static const uint8_t change[] = {2, 0, 0, 0, 3, 0, 0, 0, 'n', 'e', 'w'};
-    mlf_header h = {7, 1000000, 0x01020304u, 0, 0, sections, sizeof sections};
+    mlf_header h = {7, 1000000, 0x01020304u, 0, 0, sections, sizeof sections, 'X'};
     mlf_writer w;
     if (mlf_writer_open(&w, &h))
         return 1;
@@ -71,7 +71,8 @@ int main(int argc, char **argv)
         if (i == 10 && mlf_writer_config(&w, 1000000 + 8 * i, change, sizeof change))
             return 1;
         if (body(i, &b, &blen, &codec)
-            || mlf_segment_build(1000000 + 8 * i, 1000000 + 8 * i + 7, codec, b, blen, &seg, &slen)
+            || (i == 15 ? mlf_run_build(1000000 + 8 * i, 1000000 + 8 * i + 7, codec, 7, b, blen, &seg, &slen)
+                        : mlf_segment_build(1000000 + 8 * i, 1000000 + 8 * i + 7, codec, b, blen, &seg, &slen))
             || mlf_writer_append(&w, seg, slen, MLF_SEG, 1000000 + 8 * i + 7))
             return 1;
         free(b);

@@ -13,7 +13,8 @@
 #define MLF_MB           (1u << 20)
 #define MLF_FORMAT       1u       /* for ever: MLF has no versions (MLF.md, §11) */
 #define MLF_MAX_SECTIONS 64u
-#define MLF_CODEC        128u     /* the core's section: a codec's table */
+#define MLF_CODEC        255u     /* the core's section: a codec's table */
+#define MLF_SECTOR       512u     /* the header fills whole sectors; its mirror the last ones */
 
 enum { MLF_SEG = 1, MLF_CFG = 2 };     /* an entry's type */
 enum { MLF_RAW = 0, MLF_NRC = 1 };     /* a segment's codec */
@@ -58,6 +59,7 @@ typedef struct {
     uint32_t length;     /* parse: the whole header */
     const uint8_t *sections;
     size_t sections_len;
+    char letter;         /* the profile's, the mark's fourth byte; 0 builds 'U' */
 } mlf_header;
 
 size_t mlf_header_build(const mlf_header *h, uint8_t *out);  /* out holds 24 + sections_len */
@@ -66,6 +68,9 @@ int mlf_header_parse(const uint8_t *b, size_t len, mlf_header *h);
 /* Unframed objects, malloc'd. */
 int mlf_segment_build(uint32_t first, uint32_t last, uint8_t codec, const uint8_t *body,
                       size_t blen, uint8_t **out, size_t *len);
+/* An even run (MLF.md §4): the time byte 1 and the first record's place in its first second. */
+int mlf_run_build(uint32_t first, uint32_t last, uint8_t codec, uint16_t place, const uint8_t *body,
+                  size_t blen, uint8_t **out, size_t *len);
 int mlf_config_build(uint32_t from_second, const uint8_t *sections, size_t slen, uint8_t **out,
                      size_t *len);
 
@@ -81,6 +86,8 @@ typedef struct {
     int type;
     uint32_t first, last, from;   /* a segment's seconds · a config's */
     uint8_t codec;
+    uint8_t run;                  /* a segment's time byte: 1 an even run */
+    uint16_t place;               /* an even run's first record in its first second */
     const uint8_t *body;          /* a segment's body · a config's sections */
     size_t body_len;
 } mlf_object;
@@ -91,7 +98,7 @@ int mlf_object_parse(const uint8_t *b, size_t len, mlf_object *o);
 
 typedef struct {
     uint8_t *image;
-    size_t size, end, entries;
+    size_t size, end, entries, pad;    /* pad: the header's whole sectors */
     uint32_t last;
     mlf_sections in_force;
 } mlf_writer;
@@ -103,9 +110,12 @@ void mlf_writer_close(mlf_writer *w);
 
 typedef struct {
     const uint8_t *image;
-    size_t size, entries;
+    size_t size, entries, pad;
     mlf_header h;
 } mlf_reader;
+
+/* The header's whole sectors. */
+size_t mlf_padded(size_t length);
 
 int mlf_reader_open(mlf_reader *r, const uint8_t *image, size_t len);
 int mlf_reader_entry(const mlf_reader *r, size_t i, mlf_entry *e);

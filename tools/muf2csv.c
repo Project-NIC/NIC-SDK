@@ -2,14 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../muf/muf_read.h"
-
-static int from_file(void *ctx, uint8_t b[MUF_BLOCK])
-{
-	size_t n = fread(b, 1, MUF_BLOCK, ctx);
-
-	return n == MUF_BLOCK ? 0 : n == 0 ? 1 : -1;
-}
+#include "muffile.h"
 
 int main(int argc, char **argv)
 {
@@ -24,7 +17,7 @@ int main(int argc, char **argv)
 		return 2;
 	}
 	FILE *f = fopen(argv[1], "rb");
-	if (!f || muf_open(&r, from_file, f) != 0) {
+	if (!f || muf_open_file(&r, f) != 0) {
 		fprintf(stderr, "not a MUF file\n");
 		return 1;
 	}

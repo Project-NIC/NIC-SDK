@@ -46,10 +46,14 @@ struct muf_head {
 };
 
 typedef int (*muf_write_fn)(void *ctx, const uint8_t block[MUF_BLOCK]);
+/* A block written at its place in the file's room, counted in blocks: the head's mirror. */
+typedef int (*muf_place_fn)(void *ctx, uint32_t index, const uint8_t block[MUF_BLOCK]);
 
 struct muf_writer {
 	muf_write_fn write;
+	muf_place_fn place;
 	void *ctx;
+	uint32_t room, pos, heads;             /* the room in blocks (0 none), the next block's place, the head's blocks */
 	struct muf_head head;
 	struct muf_stream streams[MUF_MAX_STREAMS];
 	unsigned n_streams;
@@ -68,7 +72,10 @@ struct muf_writer {
 
 int muf_begin(struct muf_writer *w, muf_write_fn write, void *ctx, const struct muf_head *h,
 	      const struct muf_stream *streams, unsigned n_streams, const struct muf_group *groups,
-	      unsigned n_groups, const char *table_csv, const uint8_t *constants_step);
+	      unsigned n_groups, const char *table_csv, const uint8_t *constants_step, muf_place_fn place,
+	      uint32_t room);
+/* place and room: the head's mirror written in the room's last blocks (MUF.md §1); NULL and 0 for
+ * none. A block that would reach the mirror is refused (the error −2): the room is full. */
 /* One step of a stream (its index in the head's table), its bytes as the groups lay them. */
 int muf_step(struct muf_writer *w, unsigned stream, const uint8_t *step);
 /* Skip steps (a pause: "a jump in the numbers is a pause, with no data in it"). */

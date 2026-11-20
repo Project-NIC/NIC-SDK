@@ -31,8 +31,14 @@ static uint32_t crc32(const uint8_t *d, size_t n)
 static int emit(struct muf_writer *w, uint8_t *b)
 {
 	p32(b + 508, crc32(b, 508));
+	if (!w->error && w->room && w->pos >= w->room - w->heads) {
+		w->error = -2;                  /* the room full: the mirror reached */
+	}
 	if (!w->error && w->write(w->ctx, b) != 0) {
 		w->error = -1;
+	}
+	if (!w->error) {
+		w->pos++;
 	}
 	return w->error;
 }
@@ -110,7 +116,8 @@ static void put_group(uint8_t *p, const struct muf_group *g)
 
 int muf_begin(struct muf_writer *w, muf_write_fn write, void *ctx, const struct muf_head *h,
 	      const struct muf_stream *streams, unsigned n_streams, const struct muf_group *groups,
-	      unsigned n_groups, const char *table_csv, const uint8_t *constants_step)
+	      unsigned n_groups, const char *table_csv, const uint8_t *constants_step, muf_place_fn place,
+	      uint32_t room)
 {
 	uint8_t b[MUF_BLOCK];
 	unsigned more = n_groups > 8 ? (n_groups - 8 + 12) / 13 : 0;
@@ -120,7 +127,13 @@ int muf_begin(struct muf_writer *w, muf_write_fn write, void *ctx, const struct 
 	}
 	memset(w, 0, sizeof(*w));
 	w->write = write;
+	w->place = place;
 	w->ctx = ctx;
+	w->heads = 1 + more;
+	w->room = place ? room : 0;
+	if (w->room && w->room < 2 * w->heads + 1) {
+		return -1;
+	}
 	w->head = *h;
 	w->n_streams = n_streams;
 	memcpy(w->streams, streams, n_streams * sizeof(*streams));
@@ -153,8 +166,8 @@ int muf_begin(struct muf_writer *w, muf_write_fn write, void *ctx, const struct 
 	for (unsigned g = 0; g < n_groups && g < 8; g++) {
 		put_group(b + 208 + 36 * g, &groups[g]);
 	}
-	if (emit(w, b)) {
-		return w->error;
+	if (emit(w, b) || (w->room && w->place(w->ctx, w->room - w->heads, b) != 0)) {
+		return w->error ? w->error : (w->error = -1);
 	}
 	/* its continuations, thirteen groups each */
 	for (unsigned c = 0; c < more; c++) {
@@ -167,8 +180,8 @@ int muf_begin(struct muf_writer *w, muf_write_fn write, void *ctx, const struct 
 		for (unsigned k = 0; k < 13 && 8 + 13 * c + k < n_groups; k++) {
 			put_group(b + 12 + 36 * k, &groups[8 + 13 * c + k]);
 		}
-		if (emit(w, b)) {
-			return w->error;
+		if (emit(w, b) || (w->room && w->place(w->ctx, w->room - w->heads + 1 + c, b) != 0)) {
+			return w->error ? w->error : (w->error = -1);
 		}
 	}
 	range_start(w);

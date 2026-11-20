@@ -29,7 +29,13 @@ struct muf_block {
 };
 
 int muf_open(struct muf_reader *r, muf_read_fn read, void *ctx);
-/* The next good block after the head: 0 one given, 1 the file's end, <0 an error. */
+/* Open with the head's blocks given in memory — the mirror, when the head failed — and the data
+ * read through read, which stands past the head's blocks. */
+int muf_open_blocks(struct muf_reader *r, const uint8_t *head, unsigned n, muf_read_fn read, void *ctx);
+/* How many of the room's last n blocks, given in tail, are the head's mirror (MUF.md §1); 0 none. */
+unsigned muf_mirror(const uint8_t *tail, unsigned n);
+/* The next good block after the head: 0 one given, 1 the file's end, <0 an error. Blocks all
+ * zeros (the room unwritten) and the head's mirror are passed over. */
 int muf_next(struct muf_reader *r, struct muf_block *b);
 /* A stream's place in the head's table, by its kind; −1 none. */
 int muf_stream_index(const struct muf_reader *r, uint8_t kind);

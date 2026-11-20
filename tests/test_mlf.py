@@ -1,5 +1,6 @@
 """MLF's and NRC's cores: the C and the Python write the same sample file byte for byte
-(write_mlf_sample.c), the Python reads it back — every segment's series decoded —, NRC round-trips
+(write_mlf_sample.c), the Python reads it back — every segment's series decoded —, and reads it
+again through the header's mirror with the header damaged, NRC round-trips
 random series of every width with and without a reference, and damaged streams fail cleanly."""
 import os
 import random
@@ -64,14 +65,14 @@ def decode(b):
 
 
 def python_file():
-    w = mlf.Writer(mlf.Header(7, 1000000, 0x01020304, 0, [mlf.Section(1, b"profile")]))
+    w = mlf.Writer(mlf.Header(7, 1000000, 0x01020304, 0, [mlf.Section(1, b"profile")], letter="X"))
     expect = []
     for i in range(20):
         if i == 10:
             w.config(1000000 + 8 * i, [mlf.Section(2, b"new")])
         (codec, b), cols = body(i)
         expect.append(cols)
-        assert w.segment(1000000 + 8 * i, 1000000 + 8 * i + 7, codec, b)
+        assert w.segment(1000000 + 8 * i, 1000000 + 8 * i + 7, codec, b, 7 if i == 15 else None)   # 15 an even run
     return bytes(w.image), expect
 
 
@@ -90,8 +91,13 @@ def c_file():
 def main():
     image, expect = python_file()
     assert image == c_file(), "the C and the Python files differ"
+    assert image[:4] == b"MLFX" and image[-512:] == image[:512], "the mark or the mirror"
+    bad = bytearray(image)
+    bad[5:9] = b"\xff\xff\xff\xff"                         # the header damaged
+    r2 = mlf.Reader(bytes(bad))
+    assert r2.header.letter == "X" and [o for _, o, _ in r2.objects()] == [o for _, o, _ in mlf.Reader(image).objects()]
     r = mlf.Reader(image)
-    assert (r.header.source, r.header.sequence) == (0x01020304, 7)
+    assert (r.header.source, r.header.sequence, r.header.letter) == (0x01020304, 7, "X")
     segs, nrcs, sections = 0, 0, None
     for t, obj, sections in r.objects():
         if t != mlf.SEG:
@@ -99,6 +105,7 @@ def main():
         cols = decode(obj["body"]) if obj["codec"] == mlf.NRC else tuple(
             list(struct.unpack_from("<%dI" % N, obj["body"], 4 * N * k)) for k in range(5))
         assert cols == expect[segs], "segment %d reads back other values" % segs
+        assert (obj["run"], obj["place"]) == ((True, 7) if segs == 15 else (False, None)), "the time byte"
         nrcs += obj["codec"] == mlf.NRC
         segs += 1
     assert segs == 20 and [s.id for s in sections] == [1, 2]
@@ -126,7 +133,8 @@ def main():
             except ValueError:
                 pass
     print(f"20 segments ({nrcs} NRC, {20 - nrcs} raw) and a config: the C and the Python files "
-          "the same byte for byte, every series read back; 300 random series round-tripped")
+          "the same byte for byte, every series read back, the mirror read with the header damaged; "
+          "300 random series round-tripped")
 
 
 if __name__ == "__main__":

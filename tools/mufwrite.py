@@ -11,15 +11,21 @@ def _text(s, n):
 
 
 class Writer:
-    def __init__(self, write, head, streams, groups, table_csv="", constants=None):
+    def __init__(self, write, head, streams, groups, table_csv="", constants=None, place=None, room=0):
         """head: dict letter, session, unit, chip, fw (3), time_source, start_us, tz_q, name;
-        streams: (kind, rate_mhz, steps_per_block, step_bytes, flags); groups: dicts as MUF.md."""
+        streams: (kind, rate_mhz, steps_per_block, step_bytes, flags); groups: dicts as MUF.md;
+        place(index, block) and room: the head's mirror in the room's last blocks (MUF.md §1) — a
+        block that would reach it refused, the room full."""
         self.write, self.h, self.streams = write, head, streams
         self.number, self.dropped = 0, 0
         self.buf = [bytearray(BLOCK) for _ in streams]
         self.filled = [0] * len(streams)
         self.next = [0] * len(streams)
         more = (len(groups) - 8 + 12) // 13 if len(groups) > 8 else 0
+        self.place, self.heads, self.pos = place, 1 + more, 0
+        self.room = room if place else 0
+        if self.room and self.room < 2 * self.heads + 1:
+            raise ValueError("MUF: no room for the head and its mirror")
         b = bytearray(BLOCK)
         b[0:4] = b"MUF" + head["letter"].encode()
         b[4], b[5] = 1, 0x01
@@ -33,6 +39,8 @@ class Writer:
         for g, gr in enumerate(groups[:8]):
             self._group(b, 208 + 36 * g, gr)
         self._emit(b)
+        if self.room:
+            self.place(self.room - self.heads, bytes(b))
         for c in range(more):
             b = bytearray(BLOCK)
             b[0:4] = b"MUF" + head["letter"].encode()
@@ -41,6 +49,8 @@ class Writer:
             for k, gr in enumerate(groups[8 + 13 * c:8 + 13 * c + 13]):
                 self._group(b, 12 + 36 * k, gr)
             self._emit(b)
+            if self.room:
+                self.place(self.room - self.heads + 1 + c, bytes(b))
         self._range_start()
         t = table_csv.encode()
         for off in range(0, len(t), 494):
@@ -70,7 +80,10 @@ class Writer:
 
     def _emit(self, b):
         struct.pack_into("<I", b, 508, zlib.crc32(bytes(b[:508])))
+        if self.room and self.pos >= self.room - self.heads:
+            raise ValueError("MUF: the room full")
         self.write(bytes(b))
+        self.pos += 1
 
     def _range_start(self):
         self.range_first, self.range = self.number, []

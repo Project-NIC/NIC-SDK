@@ -1,6 +1,7 @@
 /* NIC-SDK — a sample MUF written by the C writer, for tests/test_muf.py to read back:
  * a profile of a flight recorder's shape, 60 s at 1 kHz, a pause in the slow stream, events. */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "../muf/muf.h"
 
@@ -9,11 +10,21 @@ static int to_file(void *ctx, const uint8_t b[MUF_BLOCK])
 	return fwrite(b, MUF_BLOCK, 1, ctx) == 1 ? 0 : -1;
 }
 
+/* the head's mirror: a block at its place in the room, and back where the writing stands */
+static int place(void *ctx, uint32_t index, const uint8_t b[MUF_BLOCK])
+{
+	long here = ftell(ctx);
+
+	return fseek(ctx, (long)index * MUF_BLOCK, SEEK_SET) || fwrite(b, MUF_BLOCK, 1, ctx) != 1 ||
+	       fseek(ctx, here, SEEK_SET) ? -1 : 0;
+}
+
 static void p16(uint8_t *p, uint16_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); }
 static void p32(uint8_t *p, uint32_t v) { p16(p, (uint16_t)v); p16(p + 2, (uint16_t)(v >> 16)); }
 
 int main(int argc, char **argv)
 {
+	uint32_t room = argc > 2 ? (uint32_t)atoi(argv[2]) : 0;   /* the room in blocks: the head mirrored */
 	FILE *f = fopen(argc > 1 ? argv[1] : "sample.muf", "wb");
 	static struct muf_writer w;
 	const struct muf_head h = { 'X', 7, 3, 0x1122334455667788ull, { 0, 6, 0 }, 1,
@@ -47,7 +58,8 @@ int main(int argc, char **argv)
 	for (int k = 0; k < 12; k++) {
 		p32(c + 4 * k, (uint32_t)(k * 1000 - 3000));
 	}
-	if (muf_begin(&w, to_file, f, &h, st, 5, g, 18, "kind;name;motor\nrocket;\"Test; one\";C6-3\n", c)) {
+	if (muf_begin(&w, to_file, f, &h, st, 5, g, 18, "kind;name;motor\nrocket;\"Test; one\";C6-3\n", c,
+		      room ? place : NULL, room)) {
 		return 1;
 	}
 	for (uint32_t n = 0; n < 60000; n++) {

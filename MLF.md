@@ -5,24 +5,34 @@ fixed places, steps of a fixed size, a layout fixed for the file — MLF is dyna
 length, written as they come, coded by a codec chosen per segment, and the description of what they
 are allowed to change in the middle of a file.** It suits a source that writes unevenly for months —
 a sensor that pours frames beside one that changes a value an hour, a bus whose blocks differ in
-length. The core is the same for every use; a **profile** says what the records are (§10).
+length. **The core is universal, the same for every use; what is particular to one use is its
+profile** (§10), **named by the fourth letter of the mark** (for example `H` – Heimdall, `S` –
+Strelka, …; `U` where none is known), and each program brings its own glue to read it.
 **MLF has no versions** (§11).
 
 ## 1 The file
 
 ```
 offset 0                                                             1 MB × 2^size
-┌────────┬──────────────────────────────┬──────────┬──────────────────────────────┐
-│ HEADER │ DATA → segments, configs     │  unused  │ ← DESCRIPTION, 16 B entries  │
-└────────┴──────────────────────────────┴──────────┴──────────────────────────────┘
+┌────────┬───────────────────────────┬────────┬───────────────────────────┬────────┐
+│ HEADER │ DATA → segments, configs  │ unused │ ← DESCRIPTION, 16 B each  │ MIRROR │
+└────────┴───────────────────────────┴────────┴───────────────────────────┴────────┘
 ```
 
 - **A file is 1 MB × 2^`size` — 1, 2, 4 … 128 MB — taken whole when it opens**, so a FAT or exFAT
   table is touched only then; the unwritten part reads as zeros. The size is the profile's choice
   per series, and the file records its own in the header.
-- **The data grows up from the header, the description grows down from the end.** The file is full
+- **The header fills whole sectors of 512 B**, zeros after its CRC to the sector's end, and **its
+  mirror — the same bytes — fills the file's last sectors**, written when the file opens, as
+  NIC-Arduino's MLA kept its prefix twice: a bad first sector does not blind the file. A reader whose
+  header's CRC fails takes the mirror: the fewest sectors *k* at the file's end that begin with the
+  mark, whose length fits in *k* sectors and whose CRC holds. The configs are not mirrored — they
+  are in the data, each with its own CRC, and the next file's header carries them.
+- **The data grows up from the header's last sector, the description grows down from the
+  mirror.** The file is full
   when the next object's framed bytes and its entry would cross, and the next file of the series
-  opens. **The core closes a file on nothing else.**
+  opens. **The core closes a file on nothing else.** **The next file's header carries the sections
+  in force** — the header's as every config before changed them — so every file is read alone.
 - **A series** is the run of files one source writes, numbered by the header's sequence; whose it is,
   the header's source says (§2).
 - **Everything is little-endian.** The header, every segment and every config end in a **CRC-32**
@@ -36,7 +46,7 @@ offset 0                                                             1 MB × 2^s
 
 | bytes | the field | |
 |---|---|---|
-| 0–3 | the mark | `MLF` 0x00 |
+| 0–3 | the mark | `MLF` and the profile's letter, ASCII — `U` where no profile is known |
 | 4 | the format u8 | 1, for ever — no versions (§11) |
 | 5 | size u8 | the file is 1 MB × 2^size, 0…7 |
 | 6–7 | the sequence u16 | the file's number in its series |
@@ -53,9 +63,8 @@ an id it does not know.
 
 | id | whose | |
 |---|---|---|
-| 1–127 | **the profile's** | what the records are: their layout, the source's settings, … (§10) |
-| 128 | `CODEC` | `codec 1 B · revision 1 B · length 2 B · table` — the table a codec needs to decode, for a codec that needs one (§8); NRC needs none and writes none |
-| 129–255 | the core's, free | |
+| 1–254 | **the profile's** | what the records are: their layout, the source's settings, … (§10); the mark's letter says whose |
+| 255 | `CODEC` | `codec 1 B · revision 1 B · length 2 B · table` — the table a codec needs to decode, for a codec that needs one (§8); NRC needs none and writes none |
 
 ## 4 The data — segments and configs
 
@@ -68,7 +77,8 @@ an id it does not know.
 | 8–11 | the first second u32 | the oldest record's |
 | 12–15 | the last second u32 | the newest's |
 | 16 | the codec u8 | 0 raw · 1 NRC ([`NRC.md`](NRC.md)) |
-| 17–19 | reserved | zeros |
+| 17 | the time u8 | 0 the records carry their time, as the profile says · 1 an even run |
+| 18–19 | the place u16 | an even run's first record in its first second, on the profile's grid; 0 otherwise |
 | 20… | the body | |
 | end | CRC-32 | over every byte before it |
 
@@ -77,6 +87,14 @@ them. **The codecs are a set**: the writer codes a segment with every codec it h
 shortest body, the lower codec on a tie; a codec added later takes the next number, and a reader
 skips a segment whose codec it does not know. **Every segment is read alone**: no codec carries
 state from one segment to the next.
+
+**The time, either way, segment by segment** (as NIC-Arduino's MLA kept it once, in its log): a
+segment whose records come unevenly — some kept, some not, a late repair — carries each record's
+time inside it, as the profile writes it (time 0). **An even run** (time 1) carries none: its records
+follow one another on the profile's grid of so many a second, the first at the segment's first
+second and the place — the record *i* at the first second + (place + *i*) / the grid — so the time
+is written once, in the segment and its entry. **A gap closes an even run**; the next record opens a
+segment of its own. A writer chooses per segment; a file holds both.
 
 **A config** is written when a section of the header changes, and holds from the second it names:
 
@@ -115,7 +133,7 @@ next zero and reads on.
 | 13 | reserved | zero |
 | 14–15 | CRC-16 | over the 14 bytes before |
 
-Entry *i* lies at the file's end less 16 × (*i* + 1). **Entries are of one stride and their seconds
+Entry *i* lies at the mirror's start less 16 × (*i* + 1). **Entries are of one stride and their seconds
 never go back**, so a second is a binary search over the description of a live file or a full one
 alike. A free entry reads all zeros and fails its CRC; an entry inside the good range that fails
 its CRC is a damaged object, its second taken as the last good one's before it.
@@ -153,7 +171,7 @@ writing behind that entry's object. Nothing is repaired, truncated or rebuilt.
 
 - **The source**: how bytes 16–19 of the header are read.
 - **The scale of the seconds**: its epoch and how leap seconds are kept.
-- **Its sections, ids 1–127**, and what each config of them means.
+- **Its letter** in the mark, and **its sections, ids 1–254**, and what each config of them means.
 - **The record**: its fields and its length, as codec 0 writes it.
 - **How NRC reads the records**: the series it cuts them into, their widths, signs and references,
   and the order of the parts in the stream ([`NRC.md`](NRC.md), §7).
@@ -164,8 +182,7 @@ writing behind that entry's object. Nothing is repaired, truncated or rebuilt.
 As MUF's (§12 there):
 
 1. **Nothing in the core is ever moved or given a new meaning.**
-2. **The core only grows, and only where it left room**: a section id from 129, a codec number
-   after 1, a type of entry after 2, bytes now *reserved* — **written as zeros and read as nothing**.
+2. **The core only grows, and only where it left room**: a codec number after 1, a type of entry after 2, bytes now *reserved* — **written as zeros and read as nothing**.
 3. **A reader skips what it does not know** — a section, a codec, an object whose CRC fails — and
    reads the rest.
 4. **No versions.** Byte 4 of the header stays 1 for ever; what a file holds is described in it. A

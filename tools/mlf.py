@@ -2,7 +2,7 @@
 
 A file as `MLF.md` fixes it: the header and its sections, the data — segments and configs, each
 COBS-framed and followed by a zero — growing up from the header, and the description's 16 B
-entries growing down from the end. Writes and reads a whole file in memory; what a segment's body
+entries growing down from the header's mirror at the end. Writes and reads a whole file in memory; what a segment's body
 holds is the profile's. The C (`mlf/mlf.c`) writes the same bytes.
 """
 
@@ -13,12 +13,13 @@ import zlib
 from dataclasses import dataclass, field
 from typing import Iterator, List, Optional, Sequence, Tuple
 
-MAGIC = b"MLF\x00"
+MAGIC = b"MLF"                       # and the profile's letter
+SECTOR = 512
 FORMAT = 1
 MB = 1 << 20
 SEG, CFG = 1, 2                      # an entry's type
 SYNC = {SEG: b"MSEG", CFG: b"MCFG"}
-CODEC = 128                          # the core's section: a codec's table
+CODEC = 255                          # the core's section: a codec's table
 RAW, NRC = 0, 1                      # a segment's codec
 
 
@@ -127,31 +128,41 @@ class Header:
     size: int
     sections: List[Section] = field(default_factory=list)
     length: int = 0
+    letter: str = "U"                # the profile's, the mark's fourth byte
 
 
 def header_bytes(h: Header) -> bytes:
     body = sections_bytes(h.sections)
     length = 20 + len(body) + 4
-    b = MAGIC + struct.pack("<BBHIII", FORMAT, h.size, h.sequence, length, h.first_second,
+    b = MAGIC + (h.letter or "U").encode("ascii")[:1] + struct.pack("<BBHIII", FORMAT, h.size, h.sequence, length, h.first_second,
                             h.source) + body
     return b + struct.pack("<I", crc32(b))
 
 
 def parse_header(b: bytes) -> Header:
-    if len(b) < 24 or b[:4] != MAGIC or b[4] != FORMAT:
+    if len(b) < 24 or b[:3] != MAGIC or not 0x21 <= b[3] <= 0x7E or b[4] != FORMAT:
         raise ValueError("MLF: not an MLF file")
     size, sequence, length, first, source = struct.unpack_from("<BHIII", b, 5)
     if length < 24 or length > len(b) or struct.unpack_from("<I", b, length - 4)[0] != crc32(b[:length - 4]):
         raise ValueError("MLF: the header is damaged")
     if size > 7:
         raise ValueError("MLF: a size past 128 MB")
-    return Header(sequence, first, source, size, parse_sections(b[20:length - 4]), length)
+    return Header(sequence, first, source, size, parse_sections(b[20:length - 4]), length, chr(b[3]))
+
+
+def padded(n: int) -> int:
+    """The header's whole sectors."""
+    return (n + SECTOR - 1) // SECTOR * SECTOR
 
 
 # ---------------------------------------------------------------- segments and configs
 
-def segment_bytes(first: int, last: int, codec: int, body: bytes) -> bytes:
-    b = b"MSEG" + struct.pack("<IIIB3x", 20 + len(body) + 4, first, last, codec) + body
+def segment_bytes(first: int, last: int, codec: int, body: bytes, place: Optional[int] = None) -> bytes:
+    """place None: the records carry their time (byte 17 = 0); a number: an even run, its first
+    record's place in its first second (byte 17 = 1, bytes 18–19)."""
+    run = place is not None
+    b = b"MSEG" + struct.pack("<IIIBBH", 20 + len(body) + 4, first, last, codec, int(run),
+                              place if run else 0) + body
     return b + struct.pack("<I", crc32(b))
 
 
@@ -172,8 +183,9 @@ def parse_object(b: bytes) -> Tuple[int, dict]:
     if b[:4] == b"MSEG":
         if length < 24:
             raise ValueError("MLF: a segment cut short")
-        first, last, codec = struct.unpack_from("<IIB", b, 8)
-        return SEG, {"first": first, "last": last, "codec": codec, "body": bytes(b[20:length - 4])}
+        first, last, codec, run, place = struct.unpack_from("<IIBBH", b, 8)
+        return SEG, {"first": first, "last": last, "codec": codec, "run": run == 1,
+                     "place": place if run == 1 else None, "body": bytes(b[20:length - 4])}
     return CFG, {"from": struct.unpack_from("<I", b, 8)[0], "sections": parse_sections(b[16:length - 4])}
 
 
@@ -200,8 +212,12 @@ class Writer:
         self.size = MB << header.size
         self.image = bytearray(self.size)
         hb = header_bytes(header)
+        self.pad = padded(len(hb))
+        if 2 * self.pad > self.size:
+            raise ValueError("MLF: the header past half the file")
         self.image[:len(hb)] = hb
-        self.end = len(hb)
+        self.image[self.size - self.pad:self.size - self.pad + len(hb)] = hb    # the mirror
+        self.end = self.pad
         self.entries = 0
         self.last = 0
         self.sections = list(header.sections)
@@ -210,7 +226,7 @@ class Writer:
         if second < self.last:
             raise ValueError("MLF: an entry's second goes back")
         fb = framed(obj)
-        desc = self.size - 16 * (self.entries + 1)
+        desc = self.size - self.pad - 16 * (self.entries + 1)
         if self.end + len(fb) > desc:
             return False
         self.image[self.end:self.end + len(fb)] = fb
@@ -220,8 +236,8 @@ class Writer:
         self.last = second
         return True
 
-    def segment(self, first: int, last: int, codec: int, body: bytes) -> bool:
-        return self.append(segment_bytes(first, last, codec, body), SEG, last)
+    def segment(self, first: int, last: int, codec: int, body: bytes, place: Optional[int] = None) -> bool:
+        return self.append(segment_bytes(first, last, codec, body, place), SEG, last)
 
     def config(self, from_second: int, sections: Sequence[Section]) -> bool:
         if not self.append(config_bytes(from_second, sections), CFG, from_second):
@@ -236,19 +252,38 @@ class Reader:
 
     def __init__(self, image: bytes):
         self.image = bytes(image)
-        self.header = parse_header(self.image)
+        try:
+            self.header = parse_header(self.image)
+        except ValueError:
+            self.header = self._mirror()
         if len(self.image) != MB << self.header.size:
             raise ValueError("MLF: the file is not its size")
+        self.pad = padded(self.header.length)
         self.entries = self._entries()
 
+    def _mirror(self) -> Header:
+        """The header failed: the fewest sectors k at the end that begin with the mark, whose
+        length fits in k sectors and whose CRC holds."""
+        n = len(self.image)
+        for k in range(1, n // (2 * SECTOR) + 1):
+            at = n - k * SECTOR
+            if self.image[at:at + 3] == MAGIC:
+                try:
+                    h = parse_header(self.image[at:])
+                except ValueError:
+                    continue
+                if padded(h.length) == k * SECTOR:
+                    return h
+        raise ValueError("MLF: the header and its mirror are damaged")
+
     def _entry(self, i: int):
-        at = len(self.image) - 16 * (i + 1)
+        at = len(self.image) - self.pad - 16 * (i + 1)
         return parse_entry(self.image[at:at + 16])
 
     def _entries(self) -> List[Optional[Tuple[int, int, int, int]]]:
         """The written entries are good ones, a free one all zeros and failing its CRC, so a binary
         search finds the last good entry; a damaged one the search stepped over is None."""
-        lo, hi = 0, (len(self.image) - self.header.length) // 16
+        lo, hi = 0, (len(self.image) - 2 * self.pad) // 16
         while lo < hi:
             mid = (lo + hi) // 2
             if self._entry(mid) is None:
