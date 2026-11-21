@@ -9,7 +9,7 @@ uses, so that it is written once and never copied: each project takes a tagged v
 it.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-red.svg)](https://opensource.org/licenses/MIT)
-![Version: 0.5](https://img.shields.io/badge/version-0.5-blue.svg)
+![Version: 0.5.1](https://img.shields.io/badge/version-0.5.1-blue.svg)
 
 ## What is in it
 
@@ -30,13 +30,30 @@ it.
 | [`tools/muf2mseed.c`](tools/muf2mseed.c), [`tools/muf2mseed.py`](tools/muf2mseed.py), [`tools/muf2iaga.c`](tools/muf2iaga.c), [`tools/muf2iaga.py`](tools/muf2iaga.py) | **MUF to miniSEED and to IAGA-2002**, the values found by their description in the head; twins |
 | [`tools/mlfseries.h`](tools/mlfseries.h), [`tools/mlfseries.c`](tools/mlfseries.c), [`tools/mlfseries.py`](tools/mlfseries.py) | **the socket for a program's glue**: a series of MLF files walked, the configs applied, each segment handed to the glue for its profile (below, *The glue*) |
 | [`tools/mlf2mseed.c`](tools/mlf2mseed.c), [`tools/mlf2mseed.py`](tools/mlf2mseed.py), [`tools/mlf2iaga.c`](tools/mlf2iaga.c), [`tools/mlf2iaga.py`](tools/mlf2iaga.py) | **MLF to miniSEED and to IAGA-2002** through the program's glue; twins |
+| [`tools/nrcmeasure.py`](tools/nrcmeasure.py) | **NRC measured against Steim-2** on recorded series, miniSEED or IAGA-2002, per segment length and per mode, `--ref` coding paired channels against each other — the tool behind `NRC.md` §8 |
 | [`tests/`](tests/) | the twins held to each other: a recorder's file of 60 s at 1 kHz written by the C and by the Python **the same byte for byte**, read by both readers to **the same CSV byte for byte**, and its content checked; a track exported to GPX by both twins, the same byte for byte; an MLF sample file written by the C and by the Python the same byte for byte, every series read back, random series round-tripped through NRC; MUF and MLF to miniSEED and IAGA-2002, the two twins the same bytes, ObsPy reading the records where it is installed; both containers read through their mirrors with the head destroyed |
 
 **Two twins at one level:** C for the units, the computer and the browser (WebAssembly); Python
 the same, for trying things without compiling — each held to the other.
 
 Run the tests: `python3 tests/test_muf.py`, `test_gpx.py`, `test_mlf.py`, `test_mseed.py`,
-`test_iaga.py` and `test_mlf_export.py` (a C compiler and Python 3).
+`test_iaga.py` and `test_mlf_export.py` (a C compiler and Python 3); `test_iaga_reference.py` holds
+the filters to SciPy's and, with `BDV_SEC` and `BDV_MIN` set, Budkov's own minutes to its seconds.
+
+**The series `NRC.md` was measured on** are open data, fetched as they are:
+
+```
+curl -o morc_quiet.mseed "https://geofon.gfz.de/fdsnws/dataselect/1/query?net=GE&sta=MORC&cha=HH?&starttime=2024-01-10T00:00:00&endtime=2024-01-10T00:20:00"
+curl -o morc_noto.mseed "https://geofon.gfz.de/fdsnws/dataselect/1/query?net=GE&sta=MORC&cha=HH?&starttime=2024-01-01T07:20:00&endtime=2024-01-01T07:40:00"
+curl -o bdv_20240110.sec "https://imag-data.bgs.ac.uk/GIN_V1/GINServices?Request=GetData&format=IAGA2002&testObsys=0&observatoryIagaCode=BDV&samplesPerDay=second&dataStartDate=2024-01-10&dataDuration=1&publicationState=adj-or-rep&orientation=native"
+curl -o bdv_20240110.min "https://imag-data.bgs.ac.uk/GIN_V1/GINServices?Request=GetData&format=IAGA2002&testObsys=0&observatoryIagaCode=BDV&samplesPerDay=minute&dataStartDate=2024-01-10&dataDuration=1&publicationState=adj-or-rep&orientation=native"
+python3 tools/nrcmeasure.py morc_quiet.mseed morc_noto.mseed --seconds 1,2,4,8,16,32
+python3 tools/nrcmeasure.py bdv_20240110.sec --seconds 8,64,512,4096
+BDV_SEC=bdv_20240110.sec BDV_MIN=bdv_20240110.min python3 tests/test_iaga_reference.py
+```
+
+`nrcmeasure.py` reads miniSEED through ObsPy and IAGA-2002 itself; a trace is one integer series
+and the field width the smallest whole-byte width its values fit.
 
 ## The glue
 
@@ -46,7 +63,8 @@ the program's glue**: a thin layer that knows its profile, named by the fourth l
 (for example `H` – Heimdall, `S` – Strelka, …), and tells the libraries what the tables and the
 records hold. **The letter is only a shortcut**, as a FourCC beside a container: it says whose file
 it is at a glance; the file still describes itself, so whoever understands it can write its glue. **The SDK carries no glue — only the libraries and the socket a glue plugs into**
-(`tools/mlfseries.h` and `tools/mlfseries.py`: a channel, the station, a segment's samples). Each
+(`tools/mlfseries.h` and `tools/mlfseries.py`: a channel — with SEED's orientation, if the glue knows
+it better than the name's last letter —, the station, a segment's samples). Each
 program writes its own glue and keeps it in its own repository. MUF's head describes its values in
 the core's own form, so its exporters read the values without help; what lies beyond — a stream
 with no groups, the station's place, what Appendix A suggests — is the glue's too. The glue in

@@ -6,8 +6,9 @@ SDK walks the files, the configs and the sections in force, and the program's gl
 segments. A glue is a Python module (an example: tests/glue_example.py) with:
 
   LETTER                              the profile it reads
-  channel(sections, name)             a dict — name, unit, exp10, mantissa, add, rate_num, rate_den
-                                      — or None
+  channel(sections, name)             a dict — name, unit, exp10, mantissa, add, rate_num, rate_den,
+                                      and, if the glue knows it, orient (SEED's orientation letter;
+                                      otherwise the name's last letter says) — or None
   station(sections)                   a dict — name, lat, lon, elev — or None
   samples(sections, segment, name)    (index, raw, quality) from a segment as mlf.py parses it —
                                       its first second, its time (`run`, `place`), codec and body:

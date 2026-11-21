@@ -32,7 +32,7 @@ int main(int argc, char **argv)
 	if (mlf_series(argv + 6, argc - 6, argv[5], &ch, &st, &v, &n) != 0) {
 		return 1;
 	}
-	mseed_channel_code(cha, ch.rate_num, ch.rate_den, ch.unit, mseed_orientation(ch.name, '1'));
+	mseed_channel_code(cha, ch.rate_num, ch.rate_den, ch.unit, ch.orient ? ch.orient : mseed_orientation(ch.name, '1'));
 	FILE *o = fopen(argv[1], "wb");
 	if (!o || mseed_begin(&w, argv[2], argv[3], argv[4], cha, ch.rate_num, ch.rate_den, to_file, o) != 0) {
 		fprintf(stderr, "cannot write %s\n", argv[1]);

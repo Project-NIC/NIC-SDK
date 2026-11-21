@@ -15,6 +15,7 @@ struct mlf_channel {
 	int16_t mantissa;               /* 0 counts as 1; physical = (raw + add) · mantissa · 10^exp10 */
 	int32_t add;
 	uint32_t rate_num, rate_den;    /* samples a second, num / den */
+	char orient;                    /* SEED's orientation letter, if the glue gives one; 0: by the name */
 };
 
 struct mlf_station {

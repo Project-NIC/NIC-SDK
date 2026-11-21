@@ -12,7 +12,7 @@ import mlfseries, mseed
 
 def export(glue, out, net, sta, loc, name, paths):
     ch, st, v = mlfseries.series(paths, glue, name)
-    cha = mseed.channel_code(ch["rate_num"], ch["rate_den"], ch["unit"], mseed.orientation(ch["name"], "1"))
+    cha = mseed.channel_code(ch["rate_num"], ch["rate_den"], ch["unit"], ch.get("orient") or mseed.orientation(ch["name"], "1"))
     records = []
     w = mseed.Writer(net, sta, loc, cha, ch["rate_num"], ch["rate_den"], records.append)
     i = 0

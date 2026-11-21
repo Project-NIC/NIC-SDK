@@ -80,7 +80,7 @@ int mlf_series(char *const *paths, int n, const char *name, struct mlf_channel *
 					mlf_sections_apply(&in_force, &cs);
 				}
 			} else if (o.type == MLF_SEG) {
-				if (!have && mlf_glue.channel(&in_force, name, ch) == 0) {
+				if (!have && (memset(ch, 0, sizeof(*ch)), mlf_glue.channel(&in_force, name, ch) == 0)) {
 					have = 1;
 					if (mlf_glue.station(&in_force, st) != 0) {
 						memset(st, 0, sizeof(*st));

@@ -137,7 +137,8 @@ the same ceiling and never writes past it.
 ## 8 What is assumed, and measured
 
 **NRC is assumed to code a series in no more than Steim-2 does, and a coloured or paired series in
-less.** On recorded open series, in bits a sample, the series alone, a stream every 8 s and longer:
+less.** On recorded open series, in bits a sample, the series alone, a stream every 8 s and longer
+(`tools/nrcmeasure.py`; the README says how the series are fetched):
 
 | series | stream | Steim-2 | NRC |
 |---|---|---|---|
